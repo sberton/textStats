@@ -1,4 +1,6 @@
 from pyspark import SparkContext
+import argparse
+import logging as lg
 
 sc = SparkContext()
 
@@ -32,28 +34,24 @@ def load_text(text_path):
 
     return word_freq
 
+def parse_arguments():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-d","--datafile",help="""Text File to analyze""")
+    return parser.parse_args()
+
 def main():
-    iliad = load_text('./iliad.mb.txt')
-    odyssey = load_text('./odyssey.mb.txt')
-
-    # Join the two datasets and compute the difference in frequency
-    # Note that we need to write (freq or 0) because some words do not appear
-    # in one of the two books. Thus, some frequencies are equal to None after
-    # the full outer join.
-    join_words = iliad.fullOuterJoin(odyssey)\
-        .map(lambda (word, (freq1, freq2)): (word, (freq2 or 0) - (freq1 or 0)))
-
-    # 10 words that get a boost in frequency in the sequel
-    emerging_words = join_words.takeOrdered(10, lambda (word, freq_diff): -freq_diff)
-    # 10 words that get a decrease in frequency in the sequel
-    disappearing_words = join_words.takeOrdered(10, lambda (word, freq_diff): freq_diff)
-
-    # Print results
-    for word, freq_diff in emerging_words:
-        print("%.2f" % (freq_diff*10000), word)
-    for word, freq_diff in disappearing_words[::-1]:
-        print("%.2f" % (freq_diff*10000), word)
-
+    args = parse_arguments()
+        try:
+        datafile = args.datafile
+        if datafile == None:
+            raise Warning('You must indicate a datafile!')
+    except Warning as no_datafile:
+        lg.warning(no_datafile)
+    else:
+        load_text(datafile)
+    finally:
+        lg.info('#################### Analysis is over ######################')
+    
     input("press ctrl+c to exit")
 
 if __name__ == "__main__":
