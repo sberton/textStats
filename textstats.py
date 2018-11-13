@@ -1,5 +1,6 @@
 from pyspark import SparkContext
 import argparse
+import re
 import logging as lg
 
 sc = SparkContext()
@@ -13,6 +14,8 @@ def load_text(text_path):
     # Split text in words
     # Remove empty word artefacts
     # Remove stop words ('I', 'you', 'a', 'the', ...)
+    pattern = re.compile(r"^((?!(@|\\)).)*$")
+
     vocabulary = sc.textFile(text_path)\
         .flatMap(lambda lines: lines.lower().split())\
         .flatMap(lambda word: word.split("."))\
@@ -22,17 +25,14 @@ def load_text(text_path):
         .flatMap(lambda word: word.split("'"))\
         .flatMap(lambda word: word.split("\""))\
         .filter(lambda word: word is not None and len(word) > 0)\
+        .filter(lambda word : pattern.match(word))\
         .filter(filter_stop_words)
 
-    # Count the total number of words in the text
-    word_count = vocabulary.count()
+    #compute length of each word
+    different_words = vocabulary.distinct()
+    word_len = different_words.map(lambda word: (word,len(word)))
 
-    # Compute the frequency of each word: frequency = #appearances/#word_count
-    word_freq = vocabulary.map(lambda word: (word, 1))\
-        .reduceByKey(lambda count1, count2: count1 + count2)\
-        .map(lambda (word, count): (word, count/float(word_count)))\
-
-    return word_freq
+    return word_len
 
 def parse_arguments():
     parser = argparse.ArgumentParser()
@@ -41,14 +41,20 @@ def parse_arguments():
 
 def main():
     args = parse_arguments()
-        try:
+    try:
         datafile = args.datafile
         if datafile == None:
             raise Warning('You must indicate a datafile!')
     except Warning as no_datafile:
         lg.warning(no_datafile)
     else:
-        load_text(datafile)
+        text_len = load_text(datafile)
+         # 10 words that get a decrease in frequency in the sequel
+        longuest_word = text_len.takeOrdered(10,  key = lambda x: -x[1])
+
+        # Print results
+        for word, word_len in longuest_word:
+            print("Longest word: ", word)
     finally:
         lg.info('#################### Analysis is over ######################')
     
